@@ -1,0 +1,35 @@
+# Virtual environment
+venv/
+.venv/
+env/
+# Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Log files and databases
+*.log
+*.db
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
