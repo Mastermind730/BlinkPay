@@ -1,7 +1,9 @@
 import os
 from deepface import DeepFace
 
-def verify_face(captured_img_path, known_users_folder):
+KNOWN_USERS_FOLDER = os.path.abspath("known_users")
+
+def verify_face(captured_img_path, known_users_folder=KNOWN_USERS_FOLDER):
     if not os.path.exists(captured_img_path):
         raise FileNotFoundError(f"Captured image not found: {captured_img_path}")
     
@@ -25,19 +27,10 @@ def verify_face(captured_img_path, known_users_folder):
             
             if result["verified"]:
                 username = os.path.splitext(user_img)[0]
-                print(f"Face matched with user!!: {username}")
+                print(f"Face matched with user: {username}")
                 return username
         except Exception as e:
-            print(f"Error occured: {e}")
+            print(f"Error occurred: {e}")
     
-    print("no matching user found!")
+    print("No matching user found")
     return None
-
-
-if __name__ == "__main__":
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
-    captured_image_path = os.path.join(project_root, "captured_face.jpg")
-    known_users_path = os.path.abspath(os.path.join(current_dir, "..", "known_users"))
-
-    verify_face(captured_image_path, known_users_path)
