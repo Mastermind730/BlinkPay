@@ -11,9 +11,9 @@ const Payment = () => {
   useEffect(() => {
     // This is a fallback in case someone navigates directly to /payment
     // In normal flow, this would be accessed after face scanning
-    const fallbackTimer = setTimeout(() => {
-      navigate("/scan");
-    }, 100);
+    // const fallbackTimer = setTimeout(() => {
+    //   navigate("/scan");
+    // }, 100);
     
     // Animation sequence timer
     const loadTimer = setTimeout(() => {

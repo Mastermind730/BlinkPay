@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Check, Clock, ArrowRight } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import {BrowserProvider, ethers} from "ethers";
+
 
 enum PaymentStatus {
   PREPARING,
@@ -24,13 +26,65 @@ export function PaymentProcess({ payeeName = "Alex Chen", payeeWallet = "0x71C76
   const [amount, setAmount] = useState("0.05");
   const [status, setStatus] = useState<PaymentStatus>(PaymentStatus.PREPARING);
   const [processingStep, setProcessingStep] = useState(0);
+  const [provider,setProvider]=useState<BrowserProvider| null>(null);
+  const [transactionHash,setHash]=useState<string|null>();
   const { toast } = useToast();
 
+
+  // setting the provider using ethers.js
+ useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      try {
+        const provider = new BrowserProvider(window.ethereum);
+        setProvider(provider);
+      } catch (error) {
+        console.error("Error initializing provider:", error);
+        toast({
+          title: "Wallet Error",
+          description: "Failed to connect to wallet provider",
+          variant: "destructive"
+        });
+      }
+    }
+  }, []);
+
+ const sendPayment = async () => {
+  if (!provider) {
+    toast({
+      title: "Wallet Not Connected",
+      description: "Please connect your wallet first",
+      variant: "destructive"
+    });
+    return null;
+  }
+
+  try {
+    const signer = await provider.getSigner();
+    const tx = await signer.sendTransaction({
+      to: payeeWallet,
+      value: ethers.parseEther(amount),
+    });
+    const reciept=await tx.wait();
+    console.log(tx.hash);
+    setHash(tx.hash);
+    return tx;
+  } catch (error) {
+    console.error("Transaction failed:", error);
+    toast({
+      title: "Transaction Failed",
+      description: error instanceof Error ? error.message : "Unknown error occurred",
+      variant: "destructive"
+    });
+    return null;
+  }
+};
   const shortenWalletAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const handleSubmit = () => {
+
+
+   const handleSubmit = async () => { 
     if (!amount || parseFloat(amount) <= 0) {
       toast({
         title: "Invalid amount",
@@ -40,7 +94,10 @@ export function PaymentProcess({ payeeName = "Alex Chen", payeeWallet = "0x71C76
       return;
     }
     
-    setStatus(PaymentStatus.CONFIRMING);
+    const tx = await sendPayment();
+    if (tx) {
+      setStatus(PaymentStatus.CONFIRMING);
+    }
   };
 
   const confirmPayment = () => {
@@ -151,7 +208,7 @@ export function PaymentProcess({ payeeName = "Alex Chen", payeeWallet = "0x71C76
         );
         
       case PaymentStatus.PROCESSING:
-      const steps = [
+        { const steps = [
           "Retrieving wallet details",
           "Preparing transaction",
           "Signing transaction",
@@ -190,7 +247,7 @@ export function PaymentProcess({ payeeName = "Alex Chen", payeeWallet = "0x71C76
               Please do not close this window while the transaction is being processed.
             </p>
           </div>
-        );
+        ); }
         
       case PaymentStatus.COMPLETE:
         return (
@@ -204,12 +261,17 @@ export function PaymentProcess({ payeeName = "Alex Chen", payeeWallet = "0x71C76
                 You've successfully sent {amount} ETH to {payeeName}
               </p>
             </div>
-            <div className="space-y-1 w-full text-center">
-              <p className="text-xs text-muted-foreground">Transaction Hash</p>
-              <p className="text-xs font-mono bg-muted/50 p-2 rounded-md break-all">
-                0xf87e31492faf9a91b02ee0deaad50d51d56d5d4d47e2c2f58c575b9aec9b7b8a
-              </p>
-            </div>
+           <div className="space-y-1 w-full text-center">
+        <p className="text-xs text-muted-foreground">Transaction Hash</p>
+        <p className="text-xs font-mono bg-muted/50 p-2 rounded-md break-all">
+          {transactionHash || "0x..."}
+        </p>
+      </div>
+      <Button variant="outline" asChild className="mt-4">
+        <a href={`https://sepolia.etherscan.io/tx/${transactionHash}`} target="_blank" rel="noopener noreferrer">
+          View on Etherscan
+        </a>
+      </Button>
             <Button variant="outline" asChild className="mt-4">
               <a href="/">Return Home</a>
             </Button>

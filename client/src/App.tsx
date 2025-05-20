@@ -11,11 +11,17 @@ import Scan from "./pages/Scan";
 import Payment from "./pages/Payment";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+import { config } from "./utils/config";
+import { WagmiProvider } from "wagmi";
+import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 
 const queryClient = new QueryClient();
 
 const App = () => (
+      <WagmiProvider config={config}>
+
   <QueryClientProvider client={queryClient}>
+    <RainbowKitProvider modalSize="compact">
     <ThemeProvider>
       <TooltipProvider>
         <Toaster />
@@ -33,7 +39,9 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
+    </RainbowKitProvider>
   </QueryClientProvider>
+  </WagmiProvider>
 );
 
 export default App;

@@ -7,6 +7,8 @@ import { FaceScanner } from "./FaceScanner";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader, CheckCircle, User, Mail, Wallet, Scan } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import '@rainbow-me/rainbowkit/styles.css';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 enum EnrollmentStage {
   INFO,
@@ -15,18 +17,36 @@ enum EnrollmentStage {
   COMPLETE
 }
 
+// Define interfaces for component props
+interface ProgressCircleProps {
+  active: boolean;
+  completed: boolean;
+  num: number;
+  icon: React.ReactNode;
+}
+
+interface ProgressTrackProps {
+  active: boolean;
+}
+
 export default function UserEnrollment() {
   const [stage, setStage] = useState<EnrollmentStage>(EnrollmentStage.INFO);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [animating, setAnimating] = useState(false);
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [animating, setAnimating] = useState<boolean>(false);
   const { toast } = useToast();
 
+  // Define typed interface for mouse position
+  interface MousePosition {
+    x: number;
+    y: number;
+  }
+
   // Background animation
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [mousePosition, setMousePosition] = useState<MousePosition>({ x: 0, y: 0 });
   
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent): void => {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
     
@@ -34,7 +54,7 @@ export default function UserEnrollment() {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  const handleNextStage = () => {
+  const handleNextStage = (): void => {
     if (stage === EnrollmentStage.INFO) {
       if (!name || !email) {
         toast({
@@ -73,7 +93,7 @@ export default function UserEnrollment() {
     <CheckCircle key="check" className="h-5 w-5" />
   ];
 
-  const renderStageContent = () => {
+  const renderStageContent = (): React.ReactNode => {
     switch (stage) {
       case EnrollmentStage.INFO:
         return (
@@ -93,7 +113,7 @@ export default function UserEnrollment() {
                 <Input 
                   id="name" 
                   value={name} 
-                  onChange={(e) => setName(e.target.value)} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
                   placeholder="Enter your full name"
                   className="pl-3 transition-all border-primary/20 focus:border-primary/50 bg-background/60 backdrop-blur-sm"
                 />
@@ -115,7 +135,7 @@ export default function UserEnrollment() {
                   id="email" 
                   type="email" 
                   value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} 
                   placeholder="Enter your email"
                   className="pl-3 transition-all border-primary/20 focus:border-primary/50 bg-background/60 backdrop-blur-sm"
                 />
@@ -226,7 +246,7 @@ export default function UserEnrollment() {
                         transition={{ duration: 1.5, repeat: Infinity, repeatType: "reverse", delay: 0.3 }}
                       />
                     </svg>
-                    <span className="font-medium">Connect Ethereum Wallet</span>
+                    <ConnectButton chainStatus="icon" accountStatus="avatar" />
                   </div>
                   <motion.div 
                     className="h-6 w-6 rounded-full border-2 border-white flex items-center justify-center"
@@ -364,7 +384,7 @@ export default function UserEnrollment() {
   };
 
   // Progress circle component
-  const ProgressCircle = ({ active, completed, num, icon }) => {
+  const ProgressCircle = ({ active, completed, num, icon }: ProgressCircleProps): React.ReactElement => {
     return (
       <motion.div 
         className={`flex flex-col items-center gap-2 ${completed ? "text-primary" : active ? "text-primary/80" : "text-muted-foreground"}`}
@@ -403,7 +423,7 @@ export default function UserEnrollment() {
   };
 
   // Track between progress circles
-  const ProgressTrack = ({ active }) => {
+  const ProgressTrack = ({ active }: ProgressTrackProps): React.ReactElement => {
     return (
       <div className="relative flex-1 h-1 bg-muted">
         <motion.div 
