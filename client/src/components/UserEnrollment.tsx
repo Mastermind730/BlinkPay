@@ -44,6 +44,35 @@ function FaceScanner({
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
 
+  const verifyFace = async (imageBase64: string) => {
+    try{
+      const blob = await fetch(imageBase64).then(res => res.blob());
+      const formData = new FormData();
+      formData.append("file", blob, "face.jpg");
+
+      const response = await fetch("http://localhost:8000/verify-face", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      console.log("Face Verification Result:", result);
+
+      if(result.verified){
+        alert("Face verified successfully!");
+        onScanComplete();
+      }else{
+        alert("Face verification failed. Please try again.");
+        setCapturedImage(null);
+        setIsCapturing(false);
+      }
+    }catch(error){
+      console.error("Error verifying face:", error);
+      alert("An error occurred during face verification. Please try again.");
+      setCapturedImage(null);
+      setIsCapturing(false);
+    }
+  };
   const capture = useCallback(() => {
     setIsCapturing(true);
     setScanProgress(0);
@@ -55,10 +84,8 @@ function FaceScanner({
           const imageSrc = webcamRef.current?.getScreenshot();
           if (imageSrc) {
             setCapturedImage(imageSrc);
+            verifyFace(imageSrc);
           }
-          setTimeout(() => {
-            onScanComplete();
-          }, 1000);
           return 100;
         }
         return prev + 10;
@@ -66,7 +93,7 @@ function FaceScanner({
     }, 300);
 
     return () => clearInterval(interval);
-  }, [webcamRef, onScanComplete]);
+  }, [webcamRef]);
 
   const videoConstraints = {
     width: 1280,
