@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FaceScanner } from "./FaceScanner";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader, CheckCircle, User, Mail, Wallet, Scan } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import '@rainbow-me/rainbowkit/styles.css';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import Webcam from "react-webcam";
 
 enum EnrollmentStage {
   INFO,
@@ -17,7 +17,6 @@ enum EnrollmentStage {
   COMPLETE
 }
 
-// Define interfaces for component props
 interface ProgressCircleProps {
   active: boolean;
   completed: boolean;
@@ -29,6 +28,138 @@ interface ProgressTrackProps {
   active: boolean;
 }
 
+interface FaceScannerProps {
+  onScanComplete: () => void;
+  scanningText: string;
+  showLivenessDetection?: boolean;
+}
+
+function FaceScanner({
+  onScanComplete,
+  scanningText,
+  showLivenessDetection = false,
+}: FaceScannerProps) {
+  const webcamRef = useRef<Webcam>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState(0);
+
+  const capture = useCallback(() => {
+    setIsCapturing(true);
+    setScanProgress(0);
+    
+    const interval = setInterval(() => {
+      setScanProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          const imageSrc = webcamRef.current?.getScreenshot();
+          if (imageSrc) {
+            setCapturedImage(imageSrc);
+          }
+          setTimeout(() => {
+            onScanComplete();
+          }, 1000);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, [webcamRef, onScanComplete]);
+
+  const videoConstraints = {
+    width: 1280,
+    height: 720,
+    facingMode: "user",
+  };
+
+  return (
+    <div className="flex flex-col items-center space-y-6">
+      <motion.div
+        className="relative rounded-xl overflow-hidden border-2 border-primary/30 w-full"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        {capturedImage ? (
+          <motion.img
+            src={capturedImage}
+            alt="Captured"
+            className="w-full h-auto aspect-video object-cover"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          />
+        ) : (
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            videoConstraints={videoConstraints}
+            className="w-full h-auto aspect-video"
+            mirrored={true}
+          />
+        )}
+        
+        {isCapturing && (
+          <motion.div
+            className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <div className="relative w-3/4 h-2 bg-gray-300 rounded-full overflow-hidden">
+              <motion.div
+                className="absolute top-0 left-0 h-full bg-primary rounded-full"
+                initial={{ width: "0%" }}
+                animate={{ width: `${scanProgress}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <p className="mt-4 text-white text-sm font-medium">
+              {scanningText}... {scanProgress}%
+            </p>
+          </motion.div>
+        )}
+      </motion.div>
+
+      {showLivenessDetection && (
+        <motion.div
+          className="w-full bg-primary/10 p-4 rounded-lg border border-primary/20"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <h4 className="text-sm font-medium text-primary mb-2">
+            Liveness Detection Instructions
+          </h4>
+          <ul className="text-xs text-muted-foreground space-y-1">
+            <li>• Ensure good lighting on your face</li>
+            <li>• Remove glasses or hats if possible</li>
+            <li>• Keep your face centered in the frame</li>
+            <li>• Blink naturally when prompted</li>
+          </ul>
+        </motion.div>
+      )}
+
+      {!isCapturing && !capturedImage && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <Button
+            onClick={capture}
+            className="px-8 py-6 bg-gradient-to-r from-primary to-blue-500 hover:from-primary/90 hover:to-blue-600 shadow-lg"
+          >
+            Start Face Scan
+          </Button>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
 export default function UserEnrollment() {
   const [stage, setStage] = useState<EnrollmentStage>(EnrollmentStage.INFO);
   const [name, setName] = useState<string>("");
@@ -36,13 +167,11 @@ export default function UserEnrollment() {
   const [animating, setAnimating] = useState<boolean>(false);
   const { toast } = useToast();
 
-  // Define typed interface for mouse position
   interface MousePosition {
     x: number;
     y: number;
   }
 
-  // Background animation
   const [mousePosition, setMousePosition] = useState<MousePosition>({ x: 0, y: 0 });
   
   useEffect(() => {
@@ -383,7 +512,6 @@ export default function UserEnrollment() {
     }
   };
 
-  // Progress circle component
   const ProgressCircle = ({ active, completed, num, icon }: ProgressCircleProps): React.ReactElement => {
     return (
       <motion.div 
@@ -422,7 +550,6 @@ export default function UserEnrollment() {
     );
   };
 
-  // Track between progress circles
   const ProgressTrack = ({ active }: ProgressTrackProps): React.ReactElement => {
     return (
       <div className="relative flex-1 h-1 bg-muted">
@@ -438,7 +565,6 @@ export default function UserEnrollment() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div 
           className="absolute w-96 h-96 rounded-full bg-gradient-to-r from-primary/20 to-blue-500/20 blur-3xl"
