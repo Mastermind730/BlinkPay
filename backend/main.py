@@ -1,10 +1,14 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import os
 import shutil
 import uuid
-from face_recognition.face_verifier import verify_face  # import from face_verify.py
+import numpy as np
+import cv2
+from face_recognition.face_verifier import verify_face
+from liveliness_detection.liveliness import detect_blink, detect_head_movement
 
 app = FastAPI()
 
@@ -39,6 +43,21 @@ async def verify_face_api(file: UploadFile = File(...)):
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
 
+@app.post("/liveness-check")
+async def liveness_check(file: UploadFile = File(...)):
+    contents = await file.read()
+    np_img = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+
+    blink = detect_blink(frame)
+    head = detect_head_movement(frame)
+
+    return JSONResponse({
+        "blinkDetected": blink,
+        "headMovementDetected": head
+    })
+
 @app.get("/")
 async def root():
     return RedirectResponse(url="/docs")
+
