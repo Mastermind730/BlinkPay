@@ -1,16 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi.responses import JSONResponse
 import os
-from pydantic import BaseModel,EmailStr,Field
-from dotenv import load_dotenv
+import shutil
+import uuid
+import numpy as np
+import cv2
+from face_recognition.face_verifier import verify_face
+from liveliness_detection.liveliness import detect_blink, detect_head_movement
 
+app = FastAPI()
 
-load_dotenv()
-app=FastAPI()
-
-origins=[
-    "http://localhost:3000"
+origins = [
+    "http://localhost:8080",
 ]
 
 app.add_middleware(
@@ -21,25 +24,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/verify-face")
+async def verify_face_api(file: UploadFile = File(...)):
+    os.makedirs("temp_uploads", exist_ok=True)  # Create temp folder if not exists
+    temp_filename = f"temp_{uuid.uuid4()}.jpg"
+    temp_filepath = os.path.join("temp_uploads", temp_filename)
 
+    with open(temp_filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-MONGO_URL=os.getenv("MONGODB_URL","")
-client=AsyncIOMotorClient(MONGO_URL)
-db=client.blinkers
+    try:
+        username = verify_face(temp_filepath)
+        if username:
+            return {"verified": True, "username": username}
+        else:
+            return {"verified": False, "username": None}
+    finally:
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
 
+@app.post("/liveness-check")
+async def liveness_check(file: UploadFile = File(...)):
+    contents = await file.read()
+    np_img = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
 
-class User(BaseModel):
-    name:str
-    email:EmailStr
-    face_hash:str
-    wallet_id:str
-    
-    
+    blink = detect_blink(frame)
+    head = detect_head_movement(frame)
+
+    return JSONResponse({
+        "blinkDetected": blink,
+        "headMovementDetected": head
+    })
+
 @app.get("/")
-async def main():
-    return {"message":"Hello world"}
-@app.post("/users/", response_model=User)
-async def create_user(user: User):
-    user_dict = user.model_dump()
-    result = await db.users.insert_one(user_dict)
-    return user
+async def root():
+    return RedirectResponse(url="/docs")
+
