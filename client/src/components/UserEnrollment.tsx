@@ -9,11 +9,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import '@rainbow-me/rainbowkit/styles.css';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import Webcam from "react-webcam";
+import { useAccount } from "wagmi";
 
 enum EnrollmentStage {
   INFO,
-  FACE_SCAN,
   WALLET_CONNECT,
+  FACE_SCAN,
   COMPLETE
 }
 
@@ -29,7 +30,7 @@ interface ProgressTrackProps {
 }
 
 interface FaceScannerProps {
-  onScanComplete: () => void;
+  onScanComplete: (imageData: string) => Promise<void>;
   scanningText: string;
   showLivenessDetection?: boolean;
 }
@@ -44,36 +45,7 @@ function FaceScanner({
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
 
-  const verifyFace = async (imageBase64: string) => {
-    try{
-      const blob = await fetch(imageBase64).then(res => res.blob());
-      const formData = new FormData();
-      formData.append("file", blob, "face.jpg");
-
-      const response = await fetch("http://localhost:8000/verify-face", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-      console.log("Face Verification Result:", result);
-
-      if(result.verified){
-        alert("Face verified successfully!");
-        onScanComplete();
-      }else{
-        alert("Face verification failed. Please try again.");
-        setCapturedImage(null);
-        setIsCapturing(false);
-      }
-    }catch(error){
-      console.error("Error verifying face:", error);
-      alert("An error occurred during face verification. Please try again.");
-      setCapturedImage(null);
-      setIsCapturing(false);
-    }
-  };
-  const capture = useCallback(() => {
+  const capture = useCallback(async () => {
     setIsCapturing(true);
     setScanProgress(0);
     
@@ -84,7 +56,7 @@ function FaceScanner({
           const imageSrc = webcamRef.current?.getScreenshot();
           if (imageSrc) {
             setCapturedImage(imageSrc);
-            verifyFace(imageSrc);
+            onScanComplete(imageSrc);
           }
           return 100;
         }
@@ -93,7 +65,7 @@ function FaceScanner({
     }, 300);
 
     return () => clearInterval(interval);
-  }, [webcamRef]);
+  }, [webcamRef, onScanComplete]);
 
   const videoConstraints = {
     width: 1280,
@@ -189,10 +161,13 @@ function FaceScanner({
 
 export default function UserEnrollment() {
   const [stage, setStage] = useState<EnrollmentStage>(EnrollmentStage.INFO);
-  const [name, setName] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [animating, setAnimating] = useState<boolean>(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [faceImage, setFaceImage] = useState<string | null>(null);
+  const [animating, setAnimating] = useState(false);
   const { toast } = useToast();
+  const { address, isConnected } = useAccount();
 
   interface MousePosition {
     x: number;
@@ -210,42 +185,96 @@ export default function UserEnrollment() {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  const handleNextStage = (): void => {
-    if (stage === EnrollmentStage.INFO) {
-      if (!name || !email) {
-        toast({
-          title: "Missing information",
-          description: "Please provide your name and email to continue.",
-          variant: "destructive"
-        });
-        return;
+  // Update wallet address when user connects
+  useEffect(() => {
+    if (isConnected && address) {
+      setWalletAddress(address);
+      if (stage === EnrollmentStage.WALLET_CONNECT) {
+        handleNextStage();
       }
+    }
+  }, [isConnected, address, stage]);
+
+  const handleFaceScanComplete = async (imageData: string) => {
+  try {
+    // Convert image to blob
+    const blob = await fetch(imageData).then(res => res.blob());
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append("file", blob, "face.jpg");
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("wallet_address", walletAddress);
+
+    // Add headers
+    const headers = new Headers();
+    
+    const response = await fetch("http://localhost:8000/enroll-user", {
+      method: "POST",
+      body: formData,
+      // Don't set Content-Type header - browser will set it automatically with boundary
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to enroll user");
+    }
+
+    const result = await response.json();
+    setFaceImage(imageData);
+    handleNextStage();
+    
+    toast({
+      title: "Enrollment Complete",
+      description: "Your face biometrics have been securely registered.",
+    });
+  } catch (error) {
+    console.error("Enrollment error:", error);
+    toast({
+      title: "Enrollment Failed",
+      description: error instanceof Error ? error.message : "An error occurred",
+      variant: "destructive"
+    });
+    setStage(EnrollmentStage.INFO);
+  }
+};
+
+  const handleNextStage = useCallback(() => {
+    // Validation for info stage
+    if (stage === EnrollmentStage.INFO && (!name || !email)) {
+      toast({
+        title: "Missing information",
+        description: "Please provide your name and email to continue.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validation for wallet stage
+    if (stage === EnrollmentStage.WALLET_CONNECT && !isConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet to continue.",
+        variant: "destructive"
+      });
+      return;
     }
 
     setAnimating(true);
     setTimeout(() => {
       setStage(prev => {
         const next = prev + 1;
-        if (next > EnrollmentStage.COMPLETE) {
-          return EnrollmentStage.COMPLETE;
-        }
-        return next;
+        return next > EnrollmentStage.COMPLETE ? EnrollmentStage.COMPLETE : next;
       });
       setAnimating(false);
     }, 600);
-
-    if (stage === EnrollmentStage.WALLET_CONNECT) {
-      toast({
-        title: "Enrollment Complete",
-        description: "Your face biometrics have been securely registered.",
-      });
-    }
-  };
+  }, [stage, name, email, isConnected, toast]);
 
   const stageIcons = [
     <User key="user" className="h-5 w-5" />,
-    <Scan key="scan" className="h-5 w-5" />,
     <Wallet key="wallet" className="h-5 w-5" />,
+    <Scan key="scan" className="h-5 w-5" />,
     <CheckCircle key="check" className="h-5 w-5" />
   ];
 
@@ -269,7 +298,7 @@ export default function UserEnrollment() {
                 <Input 
                   id="name" 
                   value={name} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} 
+                  onChange={(e) => setName(e.target.value)} 
                   placeholder="Enter your full name"
                   className="pl-3 transition-all border-primary/20 focus:border-primary/50 bg-background/60 backdrop-blur-sm"
                 />
@@ -291,7 +320,7 @@ export default function UserEnrollment() {
                   id="email" 
                   type="email" 
                   value={email} 
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} 
+                  onChange={(e) => setEmail(e.target.value)} 
                   placeholder="Enter your email"
                   className="pl-3 transition-all border-primary/20 focus:border-primary/50 bg-background/60 backdrop-blur-sm"
                 />
@@ -302,6 +331,33 @@ export default function UserEnrollment() {
                   transition={{ duration: 0.3 }}
                 />
               </div>
+            </div>
+          </motion.div>
+        );
+
+      case EnrollmentStage.WALLET_CONNECT:
+        return (
+          <motion.div 
+            className="space-y-6"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="text-center space-y-4 mb-6">
+              <div className="inline-flex rounded-full bg-primary/10 p-3 mx-auto">
+                <Wallet className="h-6 w-6 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Connect your blockchain wallet to link with your biometric profile.
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <ConnectButton 
+                chainStatus="icon"
+                accountStatus="full"
+                showBalance={false}
+              />
             </div>
           </motion.div>
         );
@@ -324,149 +380,10 @@ export default function UserEnrollment() {
               </p>
             </div>
             <FaceScanner 
-              onScanComplete={handleNextStage} 
+              onScanComplete={handleFaceScanComplete}
               scanningText="Enrolling face biometrics"
               showLivenessDetection
             />
-          </motion.div>
-        );
-
-      case EnrollmentStage.WALLET_CONNECT:
-        return (
-          <motion.div 
-            className="space-y-6"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.5 }}
-          >
-            <div className="text-center space-y-4 mb-6">
-              <div className="inline-flex rounded-full bg-primary/10 p-3 mx-auto">
-                <Wallet className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Connect your blockchain wallet to link with your biometric profile.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3">
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button 
-                  className="flex items-center justify-between w-full p-6 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 group"
-                  onClick={handleNextStage}
-                >
-                  <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6 text-white" viewBox="0 0 784.37 1277.39">
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M392.07 0L383.5 29.11 383.5 873.74 392.07 882.29 784.13 654.54z" 
-                        initial={{ opacity: 0.7 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
-                      />
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M392.07 0L0 654.54 392.07 882.29 392.07 472.33z" 
-                        initial={{ opacity: 0.5 }}
-                        animate={{ opacity: 0.8 }}
-                        transition={{ duration: 1.3, repeat: Infinity, repeatType: "reverse", delay: 0.2 }}
-                      />
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M392.07 956.52L387.24 962.41 387.24 1263.3 392.07 1277.38 784.37 729z" 
-                        initial={{ opacity: 0.6 }}
-                        animate={{ opacity: 0.9 }}
-                        transition={{ duration: 1.1, repeat: Infinity, repeatType: "reverse", delay: 0.4 }}
-                      />
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M392.07 1277.38L392.07 956.52 0 729z" 
-                        initial={{ opacity: 0.5 }}
-                        animate={{ opacity: 0.8 }}
-                        transition={{ duration: 1.2, repeat: Infinity, repeatType: "reverse", delay: 0.6 }}
-                      />
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M392.07 882.29L784.13 654.54 392.07 472.33z" 
-                        initial={{ opacity: 0.7 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1.4, repeat: Infinity, repeatType: "reverse", delay: 0.1 }}
-                      />
-                      <motion.path 
-                        fill="currentColor" 
-                        d="M0 654.54L392.07 882.29 392.07 472.33z" 
-                        initial={{ opacity: 0.6 }}
-                        animate={{ opacity: 0.9 }}
-                        transition={{ duration: 1.5, repeat: Infinity, repeatType: "reverse", delay: 0.3 }}
-                      />
-                    </svg>
-                    <ConnectButton chainStatus="icon" accountStatus="avatar" />
-                  </div>
-                  <motion.div 
-                    className="h-6 w-6 rounded-full border-2 border-white flex items-center justify-center"
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <motion.div 
-                      className="h-2 w-2 bg-white rounded-full" 
-                      animate={{ scale: [1, 1.5, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    />
-                  </motion.div>
-                </Button>
-              </motion.div>
-              
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button 
-                  variant="outline" 
-                  className="flex items-center justify-between w-full p-6 bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 hover:from-purple-500/20 hover:to-fuchsia-500/20 border border-purple-500/20 group"
-                  onClick={handleNextStage}
-                >
-                  <div className="flex items-center gap-3">
-                    <svg className="w-6 h-6 text-purple-500" viewBox="0 0 398 312">
-                      <motion.path 
-                        d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" 
-                        fill="currentColor"
-                        initial={{ opacity: 0.7 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1.2, repeat: Infinity, repeatType: "reverse" }}
-                      />
-                      <motion.path 
-                        d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" 
-                        fill="currentColor"
-                        initial={{ opacity: 0.5 }}
-                        animate={{ opacity: 0.9 }}
-                        transition={{ duration: 1.4, repeat: Infinity, repeatType: "reverse", delay: 0.2 }}
-                      />
-                      <motion.path 
-                        d="M333.1 120.1c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7z" 
-                        fill="currentColor"
-                        initial={{ opacity: 0.6 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1.3, repeat: Infinity, repeatType: "reverse", delay: 0.4 }}
-                      />
-                    </svg>
-                    <span className="font-medium text-foreground">Connect Solana Wallet</span>
-                  </div>
-                  <motion.div 
-                    className="h-6 w-6 rounded-full border-2 border-purple-500 flex items-center justify-center"
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <motion.div 
-                      className="h-2 w-2 bg-purple-500 rounded-full" 
-                      animate={{ scale: [1, 1.5, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    />
-                  </motion.div>
-                </Button>
-              </motion.div>
-            </div>
           </motion.div>
         );
 
@@ -571,7 +488,7 @@ export default function UserEnrollment() {
           )}
         </motion.div>
         <span className="text-xs uppercase font-medium">
-          {["Info", "Face", "Wallet", "Done"][num]}
+          {["Info", "Wallet", "Face", "Done"][num]}
         </span>
       </motion.div>
     );
@@ -665,19 +582,19 @@ export default function UserEnrollment() {
                   />
                   <ProgressTrack active={stage > EnrollmentStage.INFO} />
                   <ProgressCircle 
-                    active={stage === EnrollmentStage.FACE_SCAN} 
-                    completed={stage > EnrollmentStage.FACE_SCAN}
+                    active={stage === EnrollmentStage.WALLET_CONNECT} 
+                    completed={stage > EnrollmentStage.WALLET_CONNECT}
                     num={1}
                     icon={stageIcons[1]}
                   />
-                  <ProgressTrack active={stage > EnrollmentStage.FACE_SCAN} />
+                  <ProgressTrack active={stage > EnrollmentStage.WALLET_CONNECT} />
                   <ProgressCircle 
-                    active={stage === EnrollmentStage.WALLET_CONNECT} 
-                    completed={stage > EnrollmentStage.WALLET_CONNECT}
+                    active={stage === EnrollmentStage.FACE_SCAN} 
+                    completed={stage > EnrollmentStage.FACE_SCAN}
                     num={2} 
                     icon={stageIcons[2]}
                   />
-                  <ProgressTrack active={stage > EnrollmentStage.WALLET_CONNECT} />
+                  <ProgressTrack active={stage > EnrollmentStage.FACE_SCAN} />
                   <ProgressCircle 
                     active={stage === EnrollmentStage.COMPLETE} 
                     completed={stage >= EnrollmentStage.COMPLETE}
@@ -695,7 +612,7 @@ export default function UserEnrollment() {
             </div>
           </CardContent>
           
-          {stage < EnrollmentStage.FACE_SCAN && (
+          {stage < EnrollmentStage.WALLET_CONNECT && (
             <CardFooter className="pb-6">
               <motion.div
                 className="w-full"

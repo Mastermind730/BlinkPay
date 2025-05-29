@@ -15,6 +15,7 @@ users_collection = db["users"]
 router = APIRouter()
 
 class User(BaseModel):
-    name = str
-    email: EmailStr
-
+    name:str
+    email:EmailStr
+    face_hash:str
+    wallet_id:str 
