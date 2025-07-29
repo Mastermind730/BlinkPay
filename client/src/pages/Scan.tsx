@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { FaceScanner } from "@/components/FaceScanner";
-import { PaymentProcess } from "@/components/PaymentProcess";
 import { LivenessDetection } from "@/components/LivenessDetection";
 import { Card } from "@/components/ui/card";
+import axios from "axios";
 import { 
-  CreditCard, 
   Scan, 
   Shield, 
   ChevronRight, 
   Fingerprint, 
   CheckCircle2,
   Lock,
-  ArrowRight
+  ArrowRight,
+  Bitcoin,
+  Wallet,
+  Axis3DIcon
 } from "lucide-react";
 
 enum ScanStage {
@@ -21,10 +23,17 @@ enum ScanStage {
   PAYMENT
 }
 
-// Additional PaymentProcess component to enhance the styling
-const EnhancedPaymentProcess = () => {
+interface VerifiedUser {
+  verified: boolean;
+  name?: string;
+  wallet_address?: string;
+  confidence?: number;
+  user_id?: string;
+}
+
+const CryptoPaymentProcess = ({ recipientName, walletAddress }: { recipientName: string, walletAddress: string }) => {
   return (
-    <div className="rounded-2xl overflow-hidden border border-secondary/30 shadow-xl bg-gradient-to-br from-background via-background/95 to-background/90">
+    <div className="rounded-2xl overflow-hidden border border-secondary/30 shadow-xl bg-gradient-to-br from-background via-background/95 to-background/90 relative">
       {/* Animated border highlight */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden rounded-2xl">
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-border-flow"></div>
@@ -38,11 +47,11 @@ const EnhancedPaymentProcess = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-secondary/20 flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-primary" />
+              <Bitcoin className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-foreground">Payment Details</h3>
-              <p className="text-sm text-foreground opacity-70">Secure transaction to verified recipient</p>
+              <h3 className="font-bold text-lg text-foreground">Crypto Payment</h3>
+              <p className="text-sm text-foreground opacity-70">Secure blockchain transaction</p>
             </div>
           </div>
           <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-medium flex items-center gap-1">
@@ -57,15 +66,17 @@ const EnhancedPaymentProcess = () => {
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/10 flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xl font-bold text-primary">JD</span>
+              <span className="text-xl font-bold text-primary">
+                {recipientName.split(' ').map(n => n[0]).join('')}
+              </span>
             </div>
           </div>
           <div>
-            <h4 className="font-bold text-lg text-foreground">John Doe</h4>
-            <p className="text-sm text-foreground opacity-70">Recipient ID: #8294-FC23</p>
+            <h4 className="font-bold text-lg text-foreground">{recipientName}</h4>
+            <p className="text-sm text-foreground opacity-70">Wallet Address: {walletAddress}</p>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Frequent Contact</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/10 text-secondary">Verified ✓</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Biometric Verified</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/10 text-secondary">On-chain ✓</span>
             </div>
           </div>
         </div>
@@ -79,25 +90,26 @@ const EnhancedPaymentProcess = () => {
           <input 
             type="text" 
             className="w-full p-4 pl-8 text-2xl font-bold bg-muted/30 border border-border rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all outline-none text-foreground"
-            defaultValue="250.00"
+            defaultValue="0.10"
+            placeholder="Enter amount"
           />
         </div>
         <div className="mt-3 flex items-center justify-between text-sm text-foreground opacity-70">
-          <span>Fee: $2.50</span>
-          <span>Total: $252.50</span>
+          <span>Network: Ethereum</span>
+          <span>≈ 0.00042 ETH</span>
         </div>
       </div>
 
-      {/* Payment options */}
+      {/* Crypto payment options */}
       <div className="p-6 border-b border-border">
-        <label className="block text-sm font-medium text-foreground opacity-80 mb-3">Payment Method</label>
+        <label className="block text-sm font-medium text-foreground opacity-80 mb-3">Select Token</label>
         <div className="grid grid-cols-3 gap-3">
-          {["Credit Card", "Bank Account", "Crypto"].map((method, i) => (
+          {["ETH", "USDC", "USDT"].map((token) => (
             <div 
-              key={method} 
-              className={`p-3 rounded-xl border ${i === 0 ? 'border-primary bg-primary/5' : 'border-border bg-muted/20'} text-center cursor-pointer transition-all hover:border-primary/50`}
+              key={token} 
+              className={`p-3 rounded-xl border border-border bg-muted/20 text-center cursor-pointer transition-all hover:border-primary/50`}
             >
-              <span className="text-sm font-medium text-foreground">{method}</span>
+              <span className="text-sm font-medium text-foreground">{token}</span>
             </div>
           ))}
         </div>
@@ -112,7 +124,7 @@ const EnhancedPaymentProcess = () => {
           
           {/* Button content */}
           <div className="relative z-10 py-4 px-6 flex items-center justify-center gap-2 text-white font-medium text-lg">
-            Confirm Payment
+            Send Crypto Payment
             <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
           </div>
           
@@ -122,7 +134,7 @@ const EnhancedPaymentProcess = () => {
         
         <div className="mt-4 flex items-center justify-center gap-2 text-foreground opacity-70 text-sm">
           <Lock className="w-4 h-4" />
-          <span>Protected by SecureGuard™</span>
+          <span>Secured by blockchain technology</span>
         </div>
       </div>
     </div>
@@ -133,11 +145,14 @@ const ScanPage = () => {
   const [stage, setStage] = useState<ScanStage>(ScanStage.INITIAL);
   const [animateIn, setAnimateIn] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [verifiedUser, setVerifiedUser] = useState<VerifiedUser | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef(null);
 
   // Handle mouse movement for interactive gradients
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       setMousePosition({
         x: (e.clientX / window.innerWidth),
         y: (e.clientY / window.innerHeight)
@@ -152,7 +167,6 @@ const ScanPage = () => {
   useEffect(() => {
     setAnimateIn(true);
     
-    // Scroll to top when stage changes
     if (stage !== ScanStage.INITIAL) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -160,22 +174,209 @@ const ScanPage = () => {
 
   const handleStartScan = () => {
     setAnimateIn(false);
-    
-    // Delay the state change to allow exit animation
     setTimeout(() => {
       setStage(ScanStage.SCANNING);
       setAnimateIn(true);
     }, 300);
   };
 
-  const handleScanComplete = () => {
-    setAnimateIn(false);
+  // Helper function to convert different image formats to blob
+  const convertToBlob = async (imageData: any): Promise<Blob> => {
+    console.log('Converting image data:', typeof imageData, imageData?.constructor?.name);
     
-    // Delay the state change to allow exit animation
-    setTimeout(() => {
-      setStage(ScanStage.PAYMENT);
-      setAnimateIn(true);
-    }, 300);
+    // If it's already a Blob or File, return it
+    if (imageData instanceof Blob || imageData instanceof File) {
+      return imageData;
+    }
+    
+    // If it's a base64 string
+    if (typeof imageData === 'string') {
+      let base64String = imageData;
+      
+      // Remove data URL prefix if present
+      if (base64String.startsWith('data:')) {
+        base64String = base64String.split(',')[1];
+      }
+      
+      try {
+        const binaryString = atob(base64String);
+        const bytes = new Uint8Array(binaryString.length);
+        
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        return new Blob([bytes], { type: 'image/jpeg' });
+      } catch (err) {
+        throw new Error('Invalid base64 string');
+      }
+    }
+    
+    // If it's a canvas element
+    if (imageData instanceof HTMLCanvasElement) {
+      return new Promise<Blob>((resolve, reject) => {
+        imageData.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to convert canvas to blob'));
+          }
+        }, 'image/jpeg', 0.9);
+      });
+    }
+    
+    // If it's ImageData
+    if (imageData && typeof imageData === 'object' && imageData.data && imageData.width && imageData.height) {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageData.width;
+      canvas.height = imageData.height;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      
+      ctx.putImageData(imageData, 0, 0);
+      return convertToBlob(canvas);
+    }
+    
+    // If it's an HTMLImageElement
+    if (imageData instanceof HTMLImageElement) {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageData.naturalWidth || imageData.width;
+      canvas.height = imageData.naturalHeight || imageData.height;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      
+      ctx.drawImage(imageData, 0, 0);
+      return convertToBlob(canvas);
+    }
+    
+    // If it's a video element
+    if (imageData instanceof HTMLVideoElement) {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageData.videoWidth;
+      canvas.height = imageData.videoHeight;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      
+      ctx.drawImage(imageData, 0, 0);
+      return convertToBlob(canvas);
+    }
+    
+    // If it's an object with nested image data
+    if (typeof imageData === 'object' && imageData !== null) {
+      const possibleKeys = ['image', 'data', 'canvas', 'dataURL', 'src', 'blob'];
+      
+      for (const key of possibleKeys) {
+        if (imageData[key]) {
+          console.log(`Found nested image data in property: ${key}`);
+          return convertToBlob(imageData[key]);
+        }
+      }
+      
+      throw new Error(`Unsupported object type. Available properties: ${Object.keys(imageData).join(', ')}`);
+    }
+    
+    throw new Error(`Unsupported image data type: ${typeof imageData}`);
+  };
+
+  const handleScanComplete = async (imageData: any) => {
+    console.log('Scan complete called with:', typeof imageData, imageData?.constructor?.name);
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Convert image data to blob
+      const blob = await convertToBlob(imageData);
+      
+      console.log('Converted to blob:', {
+        size: blob.size,
+        type: blob.type,
+        sizeInMB: (blob.size / (1024 * 1024)).toFixed(2)
+      });
+      
+      // Validate blob size
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+      const MIN_SIZE = 1024; // 1KB
+      
+      if (blob.size > MAX_SIZE) {
+        throw new Error('Image too large (max 10MB)');
+      }
+      
+      if (blob.size < MIN_SIZE) {
+        throw new Error('Image file too small');
+      }
+      
+      // Create FormData
+      const formData = new FormData();
+      formData.append('file', blob, 'face_scan.jpg');
+      
+      console.log('Sending request to backend...');
+      
+      // Make API request
+      const response = await axios.post("http://localhost:8000/verify-face", formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 30000, // 30 second timeout
+      });
+
+      console.log('Backend response:', response.data);
+      
+      // Handle response
+      if (response.data.verified) {
+        setVerifiedUser({
+          verified: true,
+          name: response.data.name,
+          wallet_address: response.data.wallet_address,
+          confidence: response.data.confidence,
+          user_id: response.data.user_id
+        });
+        
+        // Move to payment stage
+        setTimeout(() => {
+          setStage(ScanStage.PAYMENT);
+        }, 1000);
+      } else {
+        setError(response.data.message || 'Face not recognized. Please try again.');
+      }
+    } catch (err) {
+      console.error('Verification error:', err);
+      
+      let errorMessage = 'Verification failed. Please try again.';
+      
+      if (axios.isAxiosError(err)) {
+        if (err.response) {
+          // Server responded with error status
+          console.error('Server error response:', err.response.data);
+          errorMessage = err.response.data?.detail || 
+                        err.response.data?.message || 
+                        `Server error (${err.response.status})`;
+        } else if (err.request) {
+          // No response received
+          console.error('No response from server:', err.request);
+          errorMessage = 'Cannot connect to server. Please check if the backend is running.';
+        } else {
+          // Request setup error
+          console.error('Request setup error:', err.message);
+          errorMessage = `Request error: ${err.message}`;
+        }
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Dynamic gradient styling based on mouse position
@@ -231,51 +432,7 @@ const ScanPage = () => {
                 style={{ animationDelay: `${i * 0.15}s` }}
               />
             ))}
-            
-            {/* Floating node points */}
-            {Array.from({ length: 15 }).map((_, i) => (
-              <circle 
-                key={`node-${i}`}
-                cx={25 + (i * 3) % 50} 
-                cy={20 + (i * 7) % 60} 
-                r="0.5"
-                fill={`hsl(${(i * 40) % 360}, 80%, 60%)`}
-                className="animate-float"
-                style={{ 
-                  animationDelay: `${i * 0.7}s`,
-                  animationDuration: `${10 + i % 5}s`
-                }}
-              />
-            ))}
-            
-            {/* Connection lines between nodes that appear based on proximity */}
-            {stage === ScanStage.SCANNING && Array.from({ length: 8 }).map((_, i) => (
-              <path 
-                key={`connection-${i}`}
-                d={`M${25 + (i * 5) % 40},${30 + (i * 3) % 30} Q${50 + (mousePosition.x * 10)},${50 + (mousePosition.y * 10)} ${60 + (i * 3) % 25},${60 + (i * 4) % 35}`}
-                stroke={`hsl(${(i * 40 + 120) % 360}, 80%, 60%)`}
-                strokeWidth="0.2"
-                strokeDasharray="0.5,2"
-                strokeOpacity="0.4"
-                fill="none"
-                className="animate-pulse"
-                style={{ animationDelay: `${i * 0.4}s` }}
-              />
-            ))}
           </svg>
-        </div>
-
-        {/* Flowing gradient shapes */}
-        <div className="absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute top-0 right-0 w-2/3 h-1/2 bg-gradient-radial from-primary/10 via-secondary/5 to-transparent rounded-full blur-3xl animate-morph opacity-60"
-            style={{ transformOrigin: 'center center' }}
-          />
-          <div className="absolute bottom-0 left-0 w-1/2 h-2/3 bg-gradient-radial from-accent/10 via-primary/5 to-transparent rounded-full blur-3xl animate-morphReverse opacity-60"
-            style={{ animationDelay: '2s', transformOrigin: 'bottom left' }}
-          />
-          <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-gradient-to-br from-secondary/10 via-primary/5 to-transparent rounded-full blur-3xl animate-float opacity-60"
-            style={{ animationDuration: '15s' }}
-          />
         </div>
 
         {/* Interactive title section with glowing effect */}
@@ -285,10 +442,10 @@ const ScanPage = () => {
             <div className="relative z-10 bg-background/80 backdrop-blur-sm rounded-full px-8 py-3 border border-secondary/20">
               <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-secondary to-accent">
                 {stage === ScanStage.PAYMENT 
-                  ? "Complete Payment" 
+                  ? "Complete Crypto Payment" 
                   : stage === ScanStage.SCANNING
-                  ? "Identifying User"
-                  : "Biometric Payment"
+                  ? "Verifying Identity"
+                  : "Crypto Biometric Pay"
                 }
               </h1>
             </div>
@@ -297,58 +454,67 @@ const ScanPage = () => {
           <p className="text-muted-foreground text-lg max-w-xl mx-auto relative">
             <span className="absolute -left-6 top-1/2 h-px w-4 bg-gradient-to-r from-transparent to-primary/50"></span>
             {stage === ScanStage.INITIAL 
-              ? "Experience the future of payments with facial recognition technology." 
+              ? "Send crypto securely using facial recognition." 
               : stage === ScanStage.SCANNING 
-                ? "Our AI is analyzing and verifying the recipient's identity." 
-                : "Recipient verified. Securely complete your transaction."
+                ? "Scanning and verifying recipient's identity on-chain." 
+                : "Recipient verified. Complete your crypto transfer."
             }
             <span className="absolute -right-6 top-1/2 h-px w-4 bg-gradient-to-l from-transparent to-primary/50"></span>
           </p>
         </div>
         
+        {/* Error message display */}
+        {error && (
+          <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-500 text-center">
+            <p className="font-medium">{error}</p>
+          </div>
+        )}
+        
+        {/* Success message display */}
+        {verifiedUser && stage === ScanStage.SCANNING && (
+          <div className="max-w-2xl mx-auto mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-500 text-center">
+            <p className="font-medium">
+              ✓ Identity verified! Found {verifiedUser.name} 
+              {verifiedUser.confidence && ` (${(verifiedUser.confidence * 100).toFixed(1)}% confidence)`}
+            </p>
+          </div>
+        )}
+        
         <div className={`grid grid-cols-1 lg:grid-cols-5 gap-8 mt-6 transition-all duration-700 ${animateIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
           <div className={`lg:col-span-${stage === ScanStage.PAYMENT ? "2" : "3"}`}>
             {stage === ScanStage.INITIAL ? (
               <Card className="p-8 bg-gradient-to-br from-background via-background/95 to-background/90 border border-secondary/20 hover:border-primary/30 transition-all duration-500 shadow-lg hover:shadow-primary/10 rounded-2xl overflow-hidden relative group">
-                {/* Subtle animated highlight effect on hover */}
                 <div className="absolute -inset-1 bg-gradient-to-r from-primary/0 via-secondary/10 to-primary/0 rounded-xl blur-xl group-hover:opacity-100 opacity-0 transition-opacity duration-700"></div>
                 
-                {/* Glowing orb animation */}
                 <div className="mb-10 relative">
                   <div className="w-32 h-32 rounded-full bg-gradient-conic from-primary via-secondary to-accent mx-auto flex items-center justify-center relative overflow-hidden group transition-all duration-500 hover:scale-105">
-                    {/* Ripple animations */}
                     <div className="absolute inset-0 bg-primary/10 scale-0 rounded-full animate-ripple"></div>
                     <div className="absolute inset-0 bg-accent/10 scale-0 rounded-full animate-ripple" style={{ animationDelay: "1s" }}></div>
                     <div className="absolute inset-0 bg-secondary/10 scale-0 rounded-full animate-ripple" style={{ animationDelay: "2s" }}></div>
                     
-                    {/* Inner glow */}
                     <div className="absolute inset-2 rounded-full bg-gradient-radial from-background via-background/90 to-background/80 flex items-center justify-center backdrop-blur-sm border border-white/10">
                       <Scan 
                         className="h-16 w-16 text-primary/90 drop-shadow-[0_0_6px_rgba(var(--primary-rgb),0.5)] animate-pulse-slow" 
                       />
                     </div>
                     
-                    {/* Rotating highlight */}
                     <div className="absolute top-0 left-1/2 h-full w-px bg-gradient-to-b from-transparent via-secondary/50 to-transparent animate-spin-slow"></div>
                   </div>
                   
-                  <h2 className="text-2xl font-bold mt-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Ready for Biometric Payment</h2>
+                  <h2 className="text-2xl font-bold mt-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Crypto Biometric Pay</h2>
                   <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-                    Our advanced facial recognition system instantly identifies payment recipients for seamless transactions
+                    Scan a face to send crypto instantly to their verified wallet address
                   </p>
                 </div>
                 
-                {/* Animated button with hover effects */}
                 <button 
                   onClick={handleStartScan}
                   className="group w-full py-4 px-6 rounded-xl font-medium relative overflow-hidden transition-all duration-300"
                 >
-                  {/* Button background layers */}
                   <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-90 group-hover:opacity-100 transition-opacity"></div>
                   <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-0 group-hover:opacity-20 transition-opacity animate-pulse-slow"></div>
                   <div className="absolute inset-[1px] bg-gradient-to-br from-background/95 to-background/70 rounded-[9px] group-hover:opacity-0 transition-opacity"></div>
                   
-                  {/* Button text layers */}
                   <span className="relative z-10 flex items-center justify-center gap-3 font-medium text-lg group-hover:text-white transition-colors duration-300 text-primary">
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary group-hover:text-white transition-colors duration-300">
                       Begin Face Scan
@@ -356,18 +522,14 @@ const ScanPage = () => {
                     <ChevronRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
                   </span>
                   
-                  {/* Button glow effect */}
                   <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/40 via-secondary/40 to-accent/40 opacity-0 group-hover:opacity-100 blur-xl transition-opacity"></div>
                 </button>
               </Card>
             ) : (
               <div className="relative">
-                {/* Background highlight effect for scanner */}
                 <div className="absolute -inset-6 bg-gradient-to-br from-primary/20 via-secondary/10 to-accent/5 rounded-3xl -z-10 transform rotate-1 scale-105 blur-lg animate-pulse-slow"></div>
                 
-                {/* Scanner with interactive border effect */}
                 <div ref={scannerRef} className="rounded-2xl overflow-hidden border border-secondary/30 shadow-xl shadow-primary/5 relative">
-                  {/* Animated border highlight that moves around the scanner */}
                   <div className="absolute inset-0 z-10 pointer-events-none">
                     <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-border-flow"></div>
                     <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-transparent via-secondary to-transparent animate-border-flow-vertical"></div>
@@ -377,11 +539,11 @@ const ScanPage = () => {
                   
                   <FaceScanner 
                     onScanComplete={handleScanComplete}
-                    scanningText={stage === ScanStage.SCANNING ? "Analyzing Biometric Data" : "Identity Verified"}
+                    scanningText={stage === ScanStage.SCANNING ? "Verifying On-Chain Identity" : "Identity Verified"}
                     showLivenessDetection={true}
+                    isLoading={isLoading}
                   />
                   
-                  {/* Subtle corner scan effect */}
                   {stage === ScanStage.SCANNING && (
                     <>
                       <div className="absolute top-0 left-0 w-16 h-16 pointer-events-none">
@@ -410,215 +572,179 @@ const ScanPage = () => {
               <div className="mt-8 animate-fade-up">
                 <LivenessDetection />
                 
-                {/* Additional animated liveness indicators */}
                 <div className="mt-4 p-4 rounded-xl border border-secondary/20 bg-gradient-to-br from-background to-background/80 backdrop-blur-md relative overflow-hidden">
                   <div className="absolute inset-0 -z-10">
-                    {/* Animated scan lines */}
-                    <div className="w-full h-2 bg-gradient-to-r from-transparent via-secondary/20 to-transparent absolute top-0 animate-scan-line"></div>
-                    <div className="w-full h-2 bg-gradient-to-r from-transparent via-primary/20 to-transparent absolute top-0 animate-scan-line" style={{ animationDelay: '1.5s' }}></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-secondary/5 to-accent/5 rounded-xl"></div>
                   </div>
-                  
-                  <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    Analyzing Biometric Markers
-                  </h3>
-                  
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {["Face Geometry", "Depth Analysis", "Eye Movement", "Micro Expressions"].map((item, i) => (
-                      <div 
-                        key={item} 
-                        className="text-xs text-center p-2 rounded-lg border border-primary/10 bg-secondary/5"
-                        style={{ 
-                          animationDelay: `${i * 0.2}s`,
-                          opacity: 0,
-                          animation: 'fadeIn 0.5s forwards',
-                        }}
-                      >
-                        {item}
-                      </div>
-                    ))}
+
+                  <div className="flex items-start gap-4">
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <Shield className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground">Security Guidelines</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Ensure proper lighting and keep your face centered in the frame for accurate verification.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
-          
+
+          {/* Right sidebar with status or payment form */}
           <div className={`lg:col-span-${stage === ScanStage.PAYMENT ? "3" : "2"}`}>
-            {stage === ScanStage.PAYMENT ? (
-              <div className="animate-fade-left">
-                <div className="absolute -inset-4 bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10 rounded-3xl -z-10 transform -rotate-1 scale-105 blur-lg animate-pulse-slow"></div>
-                <EnhancedPaymentProcess />
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* How it Works card with glass morphism effect */}
-                <Card className="overflow-hidden rounded-2xl border border-secondary/20 bg-gradient-to-br from-background via-background/90 to-background/80 backdrop-blur-md shadow-lg relative group hover:border-primary/20 transition-all duration-300">
-                  {/* Animated gradient border */}
-                  <div className="absolute inset-px rounded-2xl overflow-hidden z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
-                    <div className="absolute inset-0 bg-gradient-conic from-primary via-secondary to-accent to-primary animate-spin-slow blur-xl opacity-20"></div>
+            {stage === ScanStage.INITIAL && (
+              <Card className="p-6 bg-gradient-to-br from-background via-background/95 to-background/90 border border-secondary/20 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-primary/10 p-2 rounded-lg">
+                    <Fingerprint className="h-5 w-5 text-primary" />
                   </div>
-                  
-                  <div className="relative z-10 p-6">
-                    <h3 className="text-xl font-bold mb-5 flex items-center gap-2">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/5">
-                        <Fingerprint className="w-5 h-5 text-primary" />
-                      </div>
-                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">How It Works</span>
-                    </h3>
-                    
-                    <ul className="space-y-5">
-                      {[
-                        {
-                          title: "Biometric Verification",
-                          desc: "Advanced facial scanning identifies the recipient instantly",
-                          delay: 0
-                        },
-                        {
-                          title: "Secure Authentication",
-                          desc: "Liveness detection prevents spoofing attempts",
-                          delay: 0.2
-                        },
-                        {
-                          title: "Seamless Transaction",
-                          desc: "Complete the payment with encrypted confirmation",
-                          delay: 0.4
-                        }
-                      ].map((item, i) => (
-                        <li 
-                          key={i} 
-                          className="flex items-start gap-4 group/item relative"
-                          style={{ 
-                            opacity: 10,
-                            animation: 'fadeIn 0.5s forwards',
-                            animationDelay: `${item.delay + 0.3}s`
-                          }}
-                        >
-                          {/* Animated step indicator */}
-                          <div className="relative">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/30 to-secondary/20 flex items-center justify-center relative group-hover/item:scale-110 transition-transform duration-300">
-                              <div className="absolute inset-0 rounded-full blur-md bg-primary/20 opacity-0 group-hover/item:opacity-100 transition-opacity"></div>
-                              <span className="text-primary font-bold relative z-10">{i + 1}</span>
-                            </div>
-                            {i < 2 && <div className="absolute top-8 left-1/2 w-px h-12 bg-gradient-to-b from-primary/30 to-transparent -translate-x-1/2"></div>}
-                          </div>
-                          
-                          <div className="flex-1">
-                            <h4 className="font-medium text-foreground bg-clip-text ">{item.title}</h4>
-                            <p className="text-sm text-foreground opacity-80 mt-1">{item.desc}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </Card>
+                  <h3 className="text-xl font-bold text-foreground">How It Works</h3>
+                </div>
                 
-                {/* Security Features card with enhanced visuals */}
-                <Card className="overflow-hidden rounded-2xl border border-secondary/20 bg-gradient-to-br from-background via-background/90 to-background/80 backdrop-blur-md shadow-lg relative group hover:border-primary/20 transition-all duration-300">
-                  {/* Subtle security animation in background */}
-                  <div className="absolute inset-0 opacity-10">
-                    <svg className="w-full h-full opacity-30" viewBox="0 0 100 100" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="securityGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="var(--secondary)" stopOpacity="0.1" />
-                        </linearGradient>
-                      </defs>
-                      
-                      {/* Security pattern */}
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <path 
-                          key={`sec-path-${i}`}
-                          d={`M${10 + i * 20},10 Q${50},${30 + i * 10} ${90 - i * 20},90`}
-                          stroke="url(#securityGradient)"
-                          strokeWidth="0.5"
-                          fill="none"
-                          strokeDasharray="0.5,3"
-                          className="animate-pulse-slow"
-                          style={{ animationDelay: `${i * 0.5}s` }}
-                        />
-                      ))}
-                    </svg>
+                <div className="space-y-4">
+                  {[
+                    {
+                      icon: <Scan className="h-5 w-5 text-primary" />,
+                      title: "Face Scan",
+                      description: "Scan the recipient's face to find their verified wallet address"
+                    },
+                    {
+                      icon: <CheckCircle2 className="h-5 w-5 text-green-500" />,
+                      title: "Identity Verification",
+                      description: "We verify the identity matches our on-chain records"
+                    },
+                    {
+                      icon: <Wallet className="h-5 w-5 text-secondary" />,
+                      title: "Secure Payment",
+                      description: "Send crypto directly to their wallet with one click"
+                    }
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-start gap-4">
+                      <div className="bg-primary/10 p-2 rounded-lg mt-1">
+                        {step.icon}
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-foreground">{step.title}</h4>
+                        <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="mt-8 pt-6 border-t border-secondary/10">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-secondary/10 p-2 rounded-lg">
+                      <Lock className="h-5 w-5 text-secondary" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground">Privacy First</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Face data is processed locally and never stored on our servers
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+            
+            {stage === ScanStage.SCANNING && (
+              <Card className="p-6 bg-gradient-to-br from-background via-background/95 to-background/90 border border-secondary/20 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-primary/10 p-2 rounded-lg">
+                    <Axis3DIcon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="text-xl font-bold text-foreground">Verification Status</h3>
+                </div>
+                
+                <div className="space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-lg mt-1 ${verifiedUser ? 'bg-green-500/10' : 'bg-secondary/10'}`}>
+                      {verifiedUser ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <div className="h-5 w-5 flex items-center justify-center">
+                          <div className="h-3 w-3 rounded-full bg-secondary animate-pulse"></div>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground">Face Match</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {verifiedUser 
+                          ? `Matched to ${verifiedUser.name} with ${(verifiedUser.confidence! * 100).toFixed(1)}% confidence`
+                          : "Scanning facial features against on-chain identities"}
+                      </p>
+                    </div>
                   </div>
                   
-                  <div className="relative z-10 p-6">
-                    <h3 className="text-xl font-bold mb-5 flex items-center gap-2">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-secondary/5">
-                        <Shield className="w-5 h-5 text-primary" />
-                      </div>
-                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Security Features</span>
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        {
-                          title: "Advanced Liveness Detection",
-                          icon: <Fingerprint className="w-5 h-5 text-green-500" />,
-                          delay: 0
-                        },
-                        {
-                          title: "Zero-Knowledge Biometrics",
-                          icon: <Lock className="w-5 h-5 text-green-500" />,
-                          delay: 0.2
-                        },
-                        {
-                          title: "End-to-End Encryption",
-                          icon: <Shield className="w-5 h-5 text-green-500" />,
-                          delay: 0.4
-                        },
-                        {
-                          title: "Quantum-Resistant Algorithms",
-                          icon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
-                          delay: 0.6
-                        }
-                      ].map((item, i) => (
-                        <div 
-                          key={i} 
-                          className="flex items-center gap-3 group/item"
-                          style={{ 
-                            opacity: 10,
-                            animation: 'fadeIn 0.5s forwards',
-                            animationDelay: `${item.delay + 0.5}s`
-                          }}
-                        >
-                          <div className="p-2 rounded-lg bg-green-500/10 group-hover/item:bg-green-500/20 transition-colors">
-                            {item.icon}
-                          </div>
-                          <span className="text-sm font-medium text-foreground">{item.title}</span>
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-lg mt-1 ${verifiedUser ? 'bg-green-500/10' : 'bg-secondary/10'}`}>
+                      {verifiedUser ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <div className="h-5 w-5 flex items-center justify-center">
+                          <div className="h-3 w-3 rounded-full bg-secondary animate-pulse"></div>
                         </div>
-                      ))}
+                      )}
                     </div>
-                    
-                    {/* Security trust badge */}
-                    <div className="mt-5 pt-4 border-t border-border/50">
-                      <div className="text-xs text-foreground opacity-80 flex items-center justify-center gap-2">
-                        <Shield className="w-3 h-3 text-primary" />
-                        <span>ISO 27001 Certified | GDPR Compliant | SOC2 Type II</span>
+                    <div>
+                      <h4 className="font-medium text-foreground">Liveness Check</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {verifiedUser 
+                          ? "Confirmed real person (not a photo or video)"
+                          : "Verifying this is a live person"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start gap-4">
+                    <div className={`p-2 rounded-lg mt-1 ${verifiedUser ? 'bg-green-500/10' : 'bg-secondary/10'}`}>
+                      {verifiedUser ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <div className="h-5 w-5 flex items-center justify-center">
+                          <div className="h-3 w-3 rounded-full bg-secondary animate-pulse"></div>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground">Wallet Lookup</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {verifiedUser 
+                          ? `Found verified wallet: ${verifiedUser.wallet_address?.slice(0, 6)}...${verifiedUser.wallet_address?.slice(-4)}`
+                          : "Searching for registered wallet address"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {isLoading && (
+                  <div className="mt-6 pt-6 border-t border-secondary/10">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-primary/10 p-2 rounded-lg animate-pulse">
+                        <div className="h-5 w-5 bg-primary/20 rounded"></div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="h-4 w-32 bg-secondary/20 rounded animate-pulse"></div>
+                        <div className="h-3 w-48 bg-secondary/10 rounded animate-pulse"></div>
                       </div>
                     </div>
                   </div>
-                </Card>
-              </div>
+                )}
+              </Card>
+            )}
+            
+            {stage === ScanStage.PAYMENT && verifiedUser && (
+              <CryptoPaymentProcess 
+                recipientName={verifiedUser.name || "Verified User"} 
+                walletAddress={verifiedUser.wallet_address || "0x000...0000"} 
+              />
             )}
           </div>
         </div>
-        
-        {/* Animated progress indicator */}
-        {stage !== ScanStage.INITIAL && (
-          <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-30">
-            <div className="flex gap-2 p-2 rounded-full bg-background/80 backdrop-blur-md border border-secondary/20 shadow-lg">
-              {[ScanStage.INITIAL, ScanStage.SCANNING, ScanStage.PAYMENT].map((s, i) => (
-                <div 
-                  key={i}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    stage > s ? 'bg-green-500' : 
-                    stage === s ? 'bg-primary animate-pulse' : 
-                    'bg-muted'
-                  }`}
-                ></div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </Layout>
   );
