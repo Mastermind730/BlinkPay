@@ -16,7 +16,7 @@ from datetime import datetime
 import face_recognition
 import hashlib
 from dotenv import load_dotenv
-
+from deepface import DeepFace
 load_dotenv()
 
 
@@ -30,7 +30,7 @@ cloudinary.config(
 )
 
 
-print("Cloudinary Config:", os.getenv('CLOUDINARY_API_KEY'))
+# print("Cloudinary Config:", os.getenv('CLOUDINARY_API_KEY'))
 # MongoDB setup
 
 MONGO_URL=os.getenv("MONGODB_URL","")
@@ -40,7 +40,7 @@ users_collection = db.get_collection("users")  # Replace with your collection na
 
 try:
     # Fetch all documents in the 'users' collection
-    all_users =  users_collection.find()
+    all_users =  users_collection.find().to_list(length=None)
 
     # Print each user
     print("Total users:", users_collection.count_documents({}))
@@ -160,40 +160,60 @@ async def enroll_user(
     finally:
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
+
+
 @app.post("/verify-face")
 async def verify_face_api(file: UploadFile = File(...)):
-    os.makedirs("temp_uploads", exist_ok=True)
-    temp_filename = f"temp_{uuid.uuid4()}.jpg"
-    temp_filepath = os.path.join("temp_uploads", temp_filename)
+    temp_upload_dir = "temp_uploads"
+    os.makedirs(temp_upload_dir, exist_ok=True)
+    uploaded_temp_filepath = os.path.join(temp_upload_dir, f"uploaded_{uuid.uuid4()}.jpg")
     
     try:
-        with open(temp_filepath, "wb") as buffer:
+        # Save the uploaded file temporarily
+        with open(uploaded_temp_filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Generate face hash for the uploaded image
-        uploaded_face_hash = generate_face_hash(temp_filepath)
+        all_users = await users_collection.find().to_list(length=None) # Fetch all users
         
-        # Find matching user in database
-        all_users = list(users_collection.find({}))
         for user in all_users:
-            stored_face_hash = user['face_hash']
+            public_id = user.get('public_id')
+            if not public_id:
+                continue 
+
+            # Construct Cloudinary URL for the known user's face image
+            known_face_url = cloudinary.utils.cloudinary_url(public_id, format="jpg")[0]
             
-            # Compare face hashes (in a real app you'd use proper face comparison)
-            if uploaded_face_hash == stored_face_hash:
-                return {
-                    "verified": True,
-                    "user_id": str(user['_id']),
-                    "wallet_address": user['wallet_address'],
-                    "name": user['name']
-                }
-        
-        return {"verified": False}
+            try:
+                # DeepFace.verify can compare a local path with a URL
+                result = DeepFace.verify(
+                    img1_path=uploaded_temp_filepath,
+                    img2_path=known_face_url, 
+                    enforce_detection=True, # Will raise error if no face is detected in either image
+                    model_name="Facenet",
+                    detector_backend="retinaface"
+                )
+                
+                if result["verified"]:
+                    return JSONResponse({
+                        "verified": True,
+                        "user_id": str(user['_id']),
+                        "wallet_address": user['wallet_address'],
+                        "name": user['name']
+                    })
+            except Exception as deepface_error:
+                # This catches errors specific to DeepFace (e.g., no face found in an image)
+                print(f"DeepFace verification error for user {user.get('email', 'N/A')}: {deepface_error}")
+                continue # Try next user if this comparison fails
+                
+        return JSONResponse({"verified": False, "message": "No matching user found."})
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"General error in /verify-face: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error during verification: {e}")
     finally:
-        if os.path.exists(temp_filepath):
-            os.remove(temp_filepath)
+        if os.path.exists(uploaded_temp_filepath):
+            os.remove(uploaded_temp_filepath)
+
 
 @app.post("/liveness-check")
 async def liveness_check(file: UploadFile = File(...)):

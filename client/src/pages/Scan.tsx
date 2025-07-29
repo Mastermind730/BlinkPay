@@ -181,203 +181,73 @@ const ScanPage = () => {
   };
 
   // Helper function to convert different image formats to blob
-  const convertToBlob = async (imageData: any): Promise<Blob> => {
-    console.log('Converting image data:', typeof imageData, imageData?.constructor?.name);
-    
-    // If it's already a Blob or File, return it
-    if (imageData instanceof Blob || imageData instanceof File) {
-      return imageData;
-    }
-    
-    // If it's a base64 string
-    if (typeof imageData === 'string') {
-      let base64String = imageData;
-      
-      // Remove data URL prefix if present
-      if (base64String.startsWith('data:')) {
-        base64String = base64String.split(',')[1];
-      }
-      
-      try {
-        const binaryString = atob(base64String);
-        const bytes = new Uint8Array(binaryString.length);
-        
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        return new Blob([bytes], { type: 'image/jpeg' });
-      } catch (err) {
-        throw new Error('Invalid base64 string');
-      }
-    }
-    
-    // If it's a canvas element
-    if (imageData instanceof HTMLCanvasElement) {
-      return new Promise<Blob>((resolve, reject) => {
-        imageData.toBlob((blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Failed to convert canvas to blob'));
-          }
-        }, 'image/jpeg', 0.9);
-      });
-    }
-    
-    // If it's ImageData
-    if (imageData && typeof imageData === 'object' && imageData.data && imageData.width && imageData.height) {
-      const canvas = document.createElement('canvas');
-      canvas.width = imageData.width;
-      canvas.height = imageData.height;
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-      
-      ctx.putImageData(imageData, 0, 0);
-      return convertToBlob(canvas);
-    }
-    
-    // If it's an HTMLImageElement
-    if (imageData instanceof HTMLImageElement) {
-      const canvas = document.createElement('canvas');
-      canvas.width = imageData.naturalWidth || imageData.width;
-      canvas.height = imageData.naturalHeight || imageData.height;
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-      
-      ctx.drawImage(imageData, 0, 0);
-      return convertToBlob(canvas);
-    }
-    
-    // If it's a video element
-    if (imageData instanceof HTMLVideoElement) {
-      const canvas = document.createElement('canvas');
-      canvas.width = imageData.videoWidth;
-      canvas.height = imageData.videoHeight;
-      const ctx = canvas.getContext('2d');
-      
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
-      }
-      
-      ctx.drawImage(imageData, 0, 0);
-      return convertToBlob(canvas);
-    }
-    
-    // If it's an object with nested image data
-    if (typeof imageData === 'object' && imageData !== null) {
-      const possibleKeys = ['image', 'data', 'canvas', 'dataURL', 'src', 'blob'];
-      
-      for (const key of possibleKeys) {
-        if (imageData[key]) {
-          console.log(`Found nested image data in property: ${key}`);
-          return convertToBlob(imageData[key]);
-        }
-      }
-      
-      throw new Error(`Unsupported object type. Available properties: ${Object.keys(imageData).join(', ')}`);
-    }
-    
-    throw new Error(`Unsupported image data type: ${typeof imageData}`);
-  };
+ 
 
-  const handleScanComplete = async (imageData: any) => {
-    console.log('Scan complete called with:', typeof imageData, imageData?.constructor?.name);
+  const handleScanComplete = async (imageData: string) => {
+  console.log('Scan complete called with image data:', imageData);
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // Simplified blob conversion - assuming imageData is a data URL
+    const blob = await fetch(imageData).then(res => res.blob());
     
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Convert image data to blob
-      const blob = await convertToBlob(imageData);
-      
-      console.log('Converted to blob:', {
-        size: blob.size,
-        type: blob.type,
-        sizeInMB: (blob.size / (1024 * 1024)).toFixed(2)
-      });
-      
-      // Validate blob size
-      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-      const MIN_SIZE = 1024; // 1KB
-      
-      if (blob.size > MAX_SIZE) {
-        throw new Error('Image too large (max 10MB)');
-      }
-      
-      if (blob.size < MIN_SIZE) {
-        throw new Error('Image file too small');
-      }
-      
-      // Create FormData
-      const formData = new FormData();
-      formData.append('file', blob, 'face_scan.jpg');
-      
-      console.log('Sending request to backend...');
-      
-      // Make API request
-      const response = await axios.post("http://localhost:8000/verify-face", formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 30000, // 30 second timeout
-      });
+    console.log('Converted to blob:', {
+      size: blob.size,
+      type: blob.type,
+      sizeInMB: (blob.size / (1024 * 1024)).toFixed(2)
+    });
 
-      console.log('Backend response:', response.data);
-      
-      // Handle response
-      if (response.data.verified) {
-        setVerifiedUser({
-          verified: true,
-          name: response.data.name,
-          wallet_address: response.data.wallet_address,
-          confidence: response.data.confidence,
-          user_id: response.data.user_id
-        });
-        
-        // Move to payment stage
-        setTimeout(() => {
-          setStage(ScanStage.PAYMENT);
-        }, 1000);
-      } else {
-        setError(response.data.message || 'Face not recognized. Please try again.');
-      }
-    } catch (err) {
-      console.error('Verification error:', err);
-      
-      let errorMessage = 'Verification failed. Please try again.';
-      
-      if (axios.isAxiosError(err)) {
-        if (err.response) {
-          // Server responded with error status
-          console.error('Server error response:', err.response.data);
-          errorMessage = err.response.data?.detail || 
-                        err.response.data?.message || 
-                        `Server error (${err.response.status})`;
-        } else if (err.request) {
-          // No response received
-          console.error('No response from server:', err.request);
-          errorMessage = 'Cannot connect to server. Please check if the backend is running.';
-        } else {
-          // Request setup error
-          console.error('Request setup error:', err.message);
-          errorMessage = `Request error: ${err.message}`;
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
+    // Validate blob
+    // if (!blob.type.startsWith('image/')) {
+    //   throw new Error('Invalid image format');
+    // }
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append('file', blob, 'face_scan.jpg');
+    
+    console.log('Sending request to backend...');
+    
+    // Make API request - using fetch instead of axios for consistency
+    const response = await fetch("http://localhost:8000/verify-face", {
+      method: "POST",
+      body: formData,
+      // Let browser set Content-Type with boundary automatically
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || errorData.message || 'Verification failed');
     }
-  };
+
+    const result = await response.json();
+    console.log('Verification result:', result);
+    
+    if (result.verified) {
+      setVerifiedUser({
+        verified: true,
+        name: result.name,
+        wallet_address: result.wallet_address,
+        confidence: result.confidence,
+        user_id: result.user_id
+      });
+      
+      // Move to payment stage
+      setTimeout(() => {
+        setStage(ScanStage.PAYMENT);
+      }, 1000);
+    } else {
+      setError(result.message || 'Face not recognized. Please try again.');
+    }
+  } catch (err) {
+    console.error('Verification error:', err);
+    setError(err instanceof Error ? err.message : 'Verification failed');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Dynamic gradient styling based on mouse position
   const backgroundGradientStyle = {
