@@ -136,7 +136,7 @@ export function FaceScanner({
     const formData = new FormData();
     formData.append("file", blob, "frame.jpg");
 
-    const response = await fetch("http://localhost:8000/detect-liveness", {
+    const response = await fetch("http://localhost:8000/liveness-check", {
       method: "POST",
       body: formData,
     });
